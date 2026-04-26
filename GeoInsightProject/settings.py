@@ -6,23 +6,24 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+os.add_dll_directory(r"C:\Users\gearh\AppData\Local\Programs\OSGeo4W\bin")
+GDAL_LIBRARY_PATH = r"C:\Users\gearh\AppData\Local\Programs\OSGeo4W\bin\gdal312.dll"
+GEOS_LIBRARY_PATH = r"C:\Users\gearh\AppData\Local\Programs\OSGeo4W\bin\geos_c.dll"
+
 #Rutas para las carpetas de static y templates
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
 # Inicializa django-environ
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
-# Carga dinámicamente desde el .env
-GDAL_LIBRARY_PATH = env("GDAL_LIBRARY_PATH")
-GEOS_LIBRARY_PATH = env("GEOS_LIBRARY_PATH")
 
-SECRET_KEY = env('SECRET_KEY', default='insecure-key')
+SECRET_KEY = 'django-insecure-%=#gb-hi1*nq*)*-52q2-a7kz=oh9-lu4zlt%04)^&#1-qcvvu'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool('DEBUG', default=True)
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
+DEBUG = True
+
+ALLOWED_HOSTS = []
 
 # Application definition
 INSTALLED_APPS = [
@@ -61,7 +62,7 @@ ROOT_URLCONF = 'GeoInsightProject.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [TEMPLATE_DIR],
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -128,9 +129,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-]
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 # Configuración para archivos de media
 MEDIA_URL = '/media/'
@@ -153,15 +152,15 @@ LEAFLET_CONFIG = {
 }
 
 # Opcional GIS widgets
-GIS_WIDGETS = {
-    "default": "OLWidgetMap",
-}
+GIS_WIDGETS = {"default": "OLWidgetMap"}
 
 # Conexión con Frontend
-CORS_ALLOWED_ORIGINS = [
-    "https://www.terrenoregistro.cl",
-    "https://terrenoregistro.cl",
-]
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+])
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     'content-type',
@@ -195,8 +194,7 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Documentación de la API de GeoInsight',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    
-    # Configuración de Swagger UI
+
     'SWAGGER_UI_SETTINGS': {
         'dom_id': '#swagger-ui',
         'deepLinking': True,
@@ -220,4 +218,4 @@ EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=30)
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='no-reply@terrenoregistro.cl')
-PASSWORD_RESET_FRONTEND_URL = env('PASSWORD_RESET_FRONTEND_URL', default='https://terrenoregistro.cl/reset-password')
+PASSWORD_RESET_FRONTEND_URL = env('PASSWORD_RESET_FRONTEND_URL', default='http://localhost:5173/reset-password')

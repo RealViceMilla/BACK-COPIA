@@ -21,7 +21,6 @@ filetype==1.2.0
 inflection==0.5.1
 jsonschema==4.25.1
 jsonschema-specifications==2025.4.1
-leaflet==0.0.3
 openpyxl==3.1.5
 pillow==11.3.0
 psycopg2-binary==2.9.10
