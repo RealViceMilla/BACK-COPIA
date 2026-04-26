@@ -1,7 +1,7 @@
 from django.contrib.gis.db import models as gis_models
 from django.contrib.auth.models import User
-from django.db import models
-import os
+from django.db import models, transaction
+from django.core.exceptions import ValidationError
 
 # Modelo de roles de usuario
 class Role(models.Model):
@@ -129,8 +129,8 @@ class Evidence(models.Model):
         ('rechazada', 'Rechazada'),
     ]
 
-    group_member = models.ForeignKey('GroupMember', on_delete=models.CASCADE)
-    visita = models.ForeignKey('Visit', on_delete=models.CASCADE)
+    group_member = models.ForeignKey('GroupMember', on_delete=models.CASCADE, related_name='evidences')
+    visita = models.ForeignKey('Visit', on_delete=models.CASCADE, related_name='evidences')
     descripcion = models.TextField(blank=True, null=True)
     tomado_en = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=20, choices=ESTADOS_EVIDENCIA, default='pendiente')
@@ -150,49 +150,63 @@ class Evidence(models.Model):
             and self.ubicacion_foto is not None
             and self.validar_geocerca()
         )
-
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.descripcion[:50]}"
+        return (self.descripcion or "")[:50]
 
 class EvidenceImage(models.Model):
     evidence = models.ForeignKey(Evidence, on_delete=models.CASCADE, related_name='imagenes')
     imagen = models.ImageField(upload_to='evidencias/')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            with transaction.atomic():
+                count = EvidenceImage.objects.select_for_update().filter(
+                    evidence=self.evidence
+                ).count()
+
+                if count >= 3:
+                    raise ValidationError("Solo se permiten 3 imágenes por evidencia")
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Imagen de evidencia {self.evidence.id}"
+        return f"Imagen de evidencia {self.evidence_id}"
 
 # Modelo de revisión de evidencias por docentes
 class Review(models.Model):
     evidencia = models.OneToOneField(Evidence, on_delete=models.CASCADE, related_name='review')
-    docente = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    docente = models.ForeignKey('UserProfile', on_delete=models.CASCADE, related_name='reviews')
     validado = models.BooleanField(default=False)
     rechazada = models.BooleanField(default=False)
     comentarios = models.TextField(blank=True, null=True)
     fecha_revision = models.DateTimeField(auto_now_add=True)
 
-    def save(self, *args, **kwargs):
+    def clean(self):
         if self.validado and self.rechazada:
-            raise ValueError("No puede estar validado y rechazado a la vez")
+            raise ValidationError("No puede estar validado y rechazado al mismo tiempo")
 
-        super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        self.full_clean()
 
-        if self.validado:
-            estado = 'aprobada'
-        elif self.rechazada:
-            estado = 'rechazada'
-        else:
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+
             estado = 'pendiente'
 
-        self.evidencia.estado = estado
-        self.evidencia.save(update_fields=['estado'])
+            if self.validado:
+                estado = 'aprobada'
+            elif self.rechazada:
+                estado = 'rechazada'
+
+            Evidence.objects.filter(pk=self.evidencia_id).update(estado=estado)
 
     def delete(self, *args, **kwargs):
-        self.evidencia.estado = 'pendiente'
-        self.evidencia.save(update_fields=['estado'])
-        super().delete(*args, **kwargs)
+        with transaction.atomic():
+            Evidence.objects.filter(pk=self.evidencia_id).update(estado='pendiente')
+            super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"Review evidencia {self.evidencia_id}"
