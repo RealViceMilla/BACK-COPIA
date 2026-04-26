@@ -80,7 +80,10 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
-        profile = UserProfile.objects.get(user=request.user)
+        profile = UserProfile.objects.filter(user=request.user).first()
+        if not profile:
+            return Response({"detail": "Perfil no encontrado"}, status=404)
+        
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
 
@@ -332,11 +335,11 @@ class VisitViewSet(viewsets.ModelViewSet):
 class EvidenceViewSet(viewsets.ModelViewSet):
     queryset = Evidence.objects.all()
     serializer_class = EvidenceSerializer
-    filterset_fields = ["visita", "group_member", "estado", "en_geofence"]
+    filterset_fields = ["visita", "group", "estado", "en_geofence"]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = Evidence.objects.all().select_related("group_member__user", "visita")
+        qs = Evidence.objects.all().select_related("group","visita","created_by").prefetch_related("imagenes")
 
         career_id = self.request.query_params.get("career")
         section_id = self.request.query_params.get("section")
@@ -355,26 +358,41 @@ class EvidenceViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        group_id = self.request.data.get("group_member")
+
+        group_id = self.request.data.get("group")
         visita_id = self.request.data.get("visit")
         ubicacion_wkt = self.request.data.get("ubicacion_foto")
-    
-        group_member = GroupMember.objects.filter(group_id=group_id, user=user).first()
-        if not group_member:
-            raise ValidationError("No se encontró un miembro de grupo válido para este usuario.")
+
+        group = Group.objects.filter(id=group_id).first()
+        if not group:
+            raise ValidationError("Grupo inválido.")
+
         visita = Visit.objects.filter(id=visita_id).first()
         if not visita:
-            raise ValidationError("Visita inválida o no encontrada.")
-    
-        existing_evidences = Evidence.objects.filter(group_member__group_id=group_id, visita=visita)
-        if existing_evidences.filter(estado="rechazada").exists():
-            raise ValidationError("No se pueden subir más evidencias para esta visita porque existe una evidencia rechazada.")
+            raise ValidationError("Visita inválida.")
 
-        if existing_evidences.count() >= 3:
-            raise ValidationError("El grupo ya ha subido el máximo de 3 evidencias para esta visita.")
-    
-        ubicacion_geom = GEOSGeometry(ubicacion_wkt, srid=4326) if ubicacion_wkt else None
-        serializer.save(group_member=group_member, visita=visita, ubicacion_foto=ubicacion_geom)
+        if not GroupMember.objects.filter(group=group, user=user).exists():
+            raise ValidationError("No perteneces a este grupo.")
+
+        existing = Evidence.objects.filter(group=group, visita=visita)
+
+        if existing.filter(estado="rechazada").exists():
+            raise ValidationError("Existe una evidencia rechazada para esta visita.")
+
+        if existing.count() >= 3:
+            raise ValidationError("Máximo 3 evidencias por grupo en esta visita.")
+
+        ubicacion_geom = (
+            GEOSGeometry(ubicacion_wkt, srid=4326)
+            if ubicacion_wkt else None
+        )
+
+        serializer.save(
+            group=group,
+            visita=visita,
+            created_by=user,
+            ubicacion_foto=ubicacion_geom
+        )
 
     @action(detail=False, methods=["get"], url_path="pendientes")
     def pendientes(self, request):
@@ -414,6 +432,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         docente_profile = UserProfile.objects.get(user=self.request.user)
+        if not docente_profile.roles.filter(name="docente").exists():
+            raise ValidationError("No autorizado")
+
         review = serializer.save(docente=docente_profile)
         evidencia = review.evidencia
 

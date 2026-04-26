@@ -129,13 +129,14 @@ class Evidence(models.Model):
         ('rechazada', 'Rechazada'),
     ]
 
-    group_member = models.ForeignKey('GroupMember', on_delete=models.CASCADE, related_name='evidences')
-    visita = models.ForeignKey('Visit', on_delete=models.CASCADE, related_name='evidences')
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='evidences') # Se asocia la evidencia a un grupo específico
+    visita = models.ForeignKey('Visit', on_delete=models.CASCADE, related_name='evidences') 
     descripcion = models.TextField(blank=True, null=True)
     tomado_en = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=20, choices=ESTADOS_EVIDENCIA, default='pendiente')
     ubicacion_foto = gis_models.PointField(srid=4326, blank=True, null=True)
     en_geofence = models.BooleanField(default=False)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True) # Para ver quién creó la evidencia
 
     def validar_geocerca(self):
         if not self.visita_id or not self.ubicacion_foto:

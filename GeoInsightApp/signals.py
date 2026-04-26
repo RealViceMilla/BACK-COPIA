@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, m2m_changed, post_delete
 from django.dispatch import receiver
 import os
-from .models import Year, Semester, Career, Section, UserProfile, Evidence, Visit, Group
+from .models import Year, Semester, Section, UserProfile, Evidence, Visit, Group, Review, EvidenceImage
 
 # Sirve para crear automáticamente los semestres “Primavera” y “Otoño” para todas las carreras cada vez que se crea un nuevo año académico.
 @receiver(post_save, sender=Year)
@@ -41,50 +41,17 @@ def update_profile_on_section_add(sender, instance, action, pk_set, **kwargs):
 
         profile.save()
 
-# Señales para eliminar archivos de evidencias al eliminar instancias relacionadas
-@receiver(post_delete, sender=Evidence)
-def delete_evidence_file(sender, instance, **kwargs):
+@receiver(post_delete, sender=Review)
+def reset_evidence_state(sender, instance, **kwargs):
+    Evidence.objects.filter(pk=instance.evidencia_id).update(
+        estado='pendiente'
+    )
 
-    if instance.foto and os.path.isfile(instance.foto.path):
+@receiver(post_delete, sender=EvidenceImage)
+def delete_image_file(sender, instance, **kwargs):
+    if instance.imagen:
         try:
-            os.remove(instance.foto.path)
-            print(f"Archivo eliminado: {instance.foto.path}")
+            if os.path.isfile(instance.imagen.path):
+                os.remove(instance.imagen.path)
         except OSError as e:
-            print(f"Error al eliminar archivo: {e}")
-
-
-@receiver(post_delete, sender=Visit)
-def delete_visit_related_files(sender, instance, **kwargs):
-    
-    evidences = Evidence.objects.filter(visita=instance)
-    for evidence in evidences:
-        if evidence.foto and os.path.isfile(evidence.foto.path):
-            try:
-                os.remove(evidence.foto.path)
-                print(f"Archivo relacionado con visita eliminado: {evidence.foto.path}")
-            except OSError as e:
-                print(f"Error al eliminar archivo relacionado: {e}")
-
-@receiver(post_delete, sender=Group)
-def delete_group_related_files(sender, instance, **kwargs):
-    
-    evidences = Evidence.objects.filter(group_member__group=instance)
-    for evidence in evidences:
-        if evidence.foto and os.path.isfile(evidence.foto.path):
-            try:
-                os.remove(evidence.foto.path)
-                print(f"Archivo relacionado con grupo eliminado: {evidence.foto.path}")
-            except OSError as e:
-                print(f"Error al eliminar archivo relacionado: {e}")
-
-@receiver(post_delete, sender=UserProfile)
-def delete_user_related_files(sender, instance, **kwargs):
-    
-    evidences = Evidence.objects.filter(group_member__user=instance.user)
-    for evidence in evidences:
-        if evidence.foto and os.path.isfile(evidence.foto.path):
-            try:
-                os.remove(evidence.foto.path)
-                print(f"Archivo relacionado con usuario eliminado: {evidence.foto.path}")
-            except OSError as e:
-                print(f"Error al eliminar archivo relacionado: {e}")
+            print(f"Error eliminando imagen: {e}")

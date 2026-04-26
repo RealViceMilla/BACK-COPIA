@@ -1,8 +1,12 @@
 from django import forms
-from .models import Review, Visit, Evidence, Section, Group, UserProfile, Career, Semester, Course, GroupMember, Role
+from .models import Review, Visit, Evidence, Section, Group, UserProfile, Career, Semester, Course, GroupMember, Role, EvidenceImage
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.gis import forms as gis_forms
 from django.contrib.auth.models import User
+
+# Formulario personalizado para permitir subir múltiples archivos
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
 
 # Formulario para el inicio de sesión de usuarios
 class LoginForm(AuthenticationForm):
@@ -57,9 +61,17 @@ class VisitForm(gis_forms.ModelForm):
 
 # Formulario para subir o editar evidencias de estudiantes
 class EvidenceForm(forms.ModelForm):
+    imagenes = forms.FileField(
+        widget=MultipleFileInput(attrs={
+            "multiple": True,
+            "accept": "image/*"
+        }),
+        required=False
+    )
+
     class Meta:
         model = Evidence
-        fields = ['visita', 'foto', 'descripcion', 'ubicacion_foto']
+        fields = ['visita', 'descripcion', 'ubicacion_foto']
         widgets = {
             'descripcion': forms.Textarea(attrs={
                 'rows': 3,
@@ -67,6 +79,32 @@ class EvidenceForm(forms.ModelForm):
             }),
             'ubicacion_foto': forms.HiddenInput(),
         }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        files = self.files.getlist("imagenes")
+
+        if len(files) > 3:
+            raise forms.ValidationError("Solo puedes subir máximo 3 imágenes.")
+
+        return cleaned_data
+
+    def save(self, commit=True):
+        evidence = super().save(commit=commit)
+
+        files = self.files.getlist("imagenes")
+
+        if files:
+            # 🔥 IMPORTANTE: evitar duplicados en edición
+            EvidenceImage.objects.filter(evidence=evidence).delete()
+
+            for img in files[:3]:
+                EvidenceImage.objects.create(
+                    evidence=evidence,
+                    imagen=img
+                )
+
+        return evidence
 
 # Formulario para crear o editar revisiones de docentes
 class ReviewForm(forms.ModelForm):

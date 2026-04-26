@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.auth.models import User
+from django.db.models import Count
 from .models import (
     Role, UserProfile, Course, Group, GroupMember, Company, Visit,
     Evidence, Review, Section, Career, Semester, Year
@@ -94,12 +95,15 @@ class SectionSerializer(serializers.ModelSerializer):
         ]
 
     def get_course(self, obj):
-        if not obj.course:
+        course = obj.course
+        if not course:
             return None
-        career = obj.course.career
+
+        career = getattr(course, "career", None)
+
         return {
-            "id": obj.course.id,
-            "nombre": obj.course.nombre,
+            "id": course.id,
+            "nombre": course.nombre,
             "career": {
                 "id": career.id,
                 "nombre": career.nombre,
@@ -107,32 +111,36 @@ class SectionSerializer(serializers.ModelSerializer):
         }
 
     def get_students(self, obj):
-        estudiantes = obj.estudiantes.select_related("user")
+        estudiantes = obj.estudiantes.all()  # con prefetch en view
+
         return [
             {
                 "id": estudiante.id,
-                "full_name": f"{estudiante.user.first_name} {estudiante.user.last_name}".strip()
-                or estudiante.user.username,
+                "full_name": (
+                    f"{estudiante.user.first_name} {estudiante.user.last_name}".strip()
+                    or estudiante.user.username
+                ),
                 "user": {
                     "id": estudiante.user.id,
-                    "username": estudiante.user.username,
                     "first_name": estudiante.user.first_name,
                     "last_name": estudiante.user.last_name,
                     "email": estudiante.user.email,
                 },
                 "rut": getattr(estudiante, "rut", None),
-                "username": estudiante.user.username,
             }
             for estudiante in estudiantes
         ]
 
     def get_docentes(self, obj):
-        docentes = obj.docentes.select_related("user")
+        docentes = obj.docentes.all()  # usa prefetch_related en la vista
+
         return [
             {
                 "id": docente.id,
-                "full_name": f"{docente.user.first_name} {docente.user.last_name}".strip()
-                or docente.user.username,
+                "full_name": (
+                    f"{docente.user.first_name} {docente.user.last_name}".strip()
+                    or docente.user.username
+                ),
                 "user": {
                     "id": docente.user.id,
                     "username": docente.user.username,
@@ -145,8 +153,8 @@ class SectionSerializer(serializers.ModelSerializer):
         ]
 
     def get_students_count(self, obj):
-        return obj.estudiantes.count()
-
+        return obj.students_count #Aplicar codigo de ViewSet para contar estudiantes y evitar consultas adicionales
+    
 # Serializa miembros de grupo
 class GroupMemberSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
@@ -253,32 +261,56 @@ class VisitSerializer(serializers.ModelSerializer):
 
 # Serializa evidencias de estudiantes y sus reviews
 class EvidenceSerializer(serializers.ModelSerializer):
-    group_name = serializers.CharField(source='group_member.group.nombre', read_only=True)
-    section_name = serializers.CharField(source='group_member.group.section.nombre', read_only=True)
-    group_member = GroupMemberSerializer(read_only=True)
-    review = serializers.SerializerMethodField()
+    group_name = serializers.SerializerMethodField()
+    section_name = serializers.SerializerMethodField()
     visita = VisitSerializer(read_only=True)
-    tomado_en = serializers.DateTimeField(read_only=True)
-    foto_url = serializers.SerializerMethodField()
+    review = serializers.SerializerMethodField()
+    imagenes = serializers.SerializerMethodField()
+    created_by = UserSerializer(read_only=True)
 
     class Meta:
         model = Evidence
         fields = [
-            "id", "group_member", "group_name", "section_name",
-            "visita", "foto", "foto_url",
-            "descripcion", "estado", "ubicacion_foto",
-            "review", "en_geofence", "tomado_en",
+            "id",
+            "group",
+            "group_name",
+            "section_name",
+            "visita",
+            "descripcion",
+            "estado",
+            "ubicacion_foto",
+            "imagenes",
+            "review",
+            "en_geofence",
+            "tomado_en",
+            "created_by",
         ]
+        read_only_fields = ["created_by", "estado", "en_geofence", "tomado_en"]
+
+    def get_group_name(self, obj):
+        if not obj.group:
+            return None
+        return obj.group.nombre
+
+    def get_section_name(self, obj):
+        if not obj.group or not obj.group.section:
+            return None
+        return obj.group.section.nombre
 
     def get_review(self, obj):
-        review = getattr(obj, "review", None)
-        return ReviewSerializer(review).data if review else None
+        review = obj.review if hasattr(obj, "review") else None
+        if not review:
+            return None
+        return ReviewSerializer(review, context=self.context).data
 
-    def get_foto_url(self, obj):
+    def get_imagenes(self, obj):
         request = self.context.get("request")
-        if obj.foto and hasattr(obj.foto, "url"):
-            return request.build_absolute_uri(obj.foto.url) if request else obj.foto.url
-        return None
+
+        return [
+            request.build_absolute_uri(img.imagen.url) if request else img.imagen.url
+            for img in obj.imagenes.all()
+            if img.imagen
+        ]
 
 # Serializa revisiones de evidencias (GET)
 class ReviewSerializer(serializers.ModelSerializer):
@@ -287,12 +319,49 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
-        fields = ["id", "evidencia", "docente", "validado", "comentarios", "fecha_revision"]
+        fields = [
+            "id",
+            "evidencia",
+            "docente",
+            "validado",
+            "rechazada",
+            "comentarios",
+            "fecha_revision",
+        ]
 
     def get_evidencia(self, obj):
-        if obj.evidencia:
-            return {"id": obj.evidencia.id, "descripcion": obj.evidencia.descripcion, "fecha": getattr(obj.evidencia, "created_at", None)}
-        return None
+        evidencia = getattr(obj, "evidencia", None)
+        if not evidencia:
+            return None
+
+        return {
+            "id": evidencia.id,
+            "descripcion": evidencia.descripcion,
+            "estado": evidencia.estado,
+            "grupo": self._get_grupo(evidencia),
+            "visita": self._get_visita(evidencia),
+            "tomado_en": evidencia.tomado_en,
+        }
+
+    def _get_grupo(self, evidencia):
+        group = getattr(evidencia, "group", None)
+        if not group:
+            return None
+
+        return {
+            "id": group.id,
+            "nombre": group.nombre,
+        }
+
+    def _get_visita(self, evidencia):
+        visita = getattr(evidencia, "visita", None)
+        if not visita:
+            return None
+
+        return {
+            "id": visita.id,
+            "nombre": visita.nombre,
+        }
 
 # Serializador para crear revisiones de evidencias (POST)
 class ReviewCreateSerializer(serializers.ModelSerializer):
@@ -345,7 +414,7 @@ class GroupSerializer(serializers.ModelSerializer):
         fields = ["id", "nombre", "section", "members", "evidences", "reviews"]
 
     def get_evidences(self, obj):
-        evidencias = Evidence.objects.filter(group_member__group=obj)
+        evidencias = obj.evidences.all()
         return EvidenceSerializer(
             evidencias, 
             many=True, 
@@ -353,8 +422,8 @@ class GroupSerializer(serializers.ModelSerializer):
         ).data
 
     def get_reviews(self, obj):
-        revisiones = Review.objects.filter(evidencia__group_member__group=obj)
-        return ReviewSerializer(revisiones, many=True).data
+        revisiones = Review.objects.filter(evidencia__group=obj)
+        return ReviewSerializer(revisiones, many=True, context=self.context).data
 
 # Serializa compañías con ubicación geoespacial
 class CompanySerializer(GeoFeatureModelSerializer):
