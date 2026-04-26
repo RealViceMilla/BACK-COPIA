@@ -1,0 +1,121 @@
+:root {
+    --color-primary: #1A2A44;       /* Azul profundo */
+    --color-primary-dark: #0F1B33;  /* Azul muy oscuro */
+    --color-primary-light: #3A506B; /* Azul más claro para hover/acentos */
+    --color-secondary: #5D6D7E;     /* Gris azulado elegante para textos secundarios */
+    --color-accent: #FFC857;        /* Dorado suave para acentos/alertas positivas */
+    --color-bg-light: #F5F6FA;      /* Fondo muy claro */
+    --color-bg-gradient: linear-gradient(135deg, #F5F6FA 0%, #E8EAED 100%);
+    --color-text: #1A2A44;          /* Texto principal */
+    --color-danger: #E63946;        /* Rojo profesional para errores */
+}
+
+
+body {
+    margin: 0;
+    font-family: "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(135deg, #F5F6FA 0%, #E8EAED 100%);
+    color: #1A2A44;
+}
+
+/* ------------------------------------------------ */
+/* Tarjetas (Index, Login, Formularios) */
+/* ------------------------------------------------ */
+.card {
+    background: #fff;
+    padding: 2.5rem 2rem;
+    border-radius: 20px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.15);
+    text-align: center;
+    max-width: 450px;
+    margin: 2rem auto;
+    animation: fadeIn 0.8s ease;
+}
+
+/* Títulos generales */
+.title {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--color-primary);
+    margin-bottom: 0.8rem;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: var(--color-secondary);
+    margin-bottom: 2rem;
+}
+
+/* Botones base */
+.btn {
+    display: inline-block;
+    width: 100%;
+    padding: 0.95rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 14px;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* Botón primario */
+.btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+}
+.btn-primary:hover {
+    background: var(--color-primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+}
+
+/* Botón outline */
+.btn-outline {
+    background: transparent;
+    color: var(--color-primary);
+    border: 2px solid var(--color-primary);
+}
+.btn-outline:hover {
+    background: var(--color-primary);
+    color: #fff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+}
+
+/* Animación sutil */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px);}
+    to { opacity: 1; transform: translateY(0);}
+}
+
+/* ============================= */
+/* Contenido de bienvenida - panel docente y estudiante.
+/* ============================= */
+.dashboard-welcome-content {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+.dashboard-welcome-content .welcome-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.dashboard-welcome-content .welcome-title {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: var(--color-primary);
+    margin-bottom: 0.5rem;
+}
+
+.dashboard-welcome-content .welcome-text {
+    font-size: 1rem;
+    color: var(--color-text);
+}
